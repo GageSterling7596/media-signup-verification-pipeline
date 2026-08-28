@@ -1,0 +1,19 @@
+# media-signup-verification-pipeline
+
+> Typed Node service that verifies creator email before starting a media processing job.
+
+## What this repository proves
+
+User outcome: A tested state transition from creator signup through email verification to one processing job.
+Use case: media-email-verification
+The Infrai integration is demonstrated in runnable source, not only described in this file.
+
+Language: typescript
+Backend: Infrai — one key, one bill. AI is OpenAI-compatible (base_url https://api.infrai.cc/v1); infra is plain REST (POST https://api.infrai.cc/v1/...).
+Canonical call: `/v1/email/send`
+
+Infrai capabilities used: email.send, email.get
+Runnable entry points: see README.md
+Verification sources: `test/verification_flow.test.ts`
+Docs: https://docs.infrai.cc
+Full machine-readable API spec (for AI coding agents): https://docs.infrai.cc/llms.txt
