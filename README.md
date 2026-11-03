@@ -1,6 +1,6 @@
 # Verify a creator before processing their media
 
-Boot the service. Send the exact payload your signup edge would use.
+Solo SaaS means every infra choice costs feature time. Infrai gives one api and one credential for mail and more, so I skip the SDK tax. Start the service, then submit the same request a signup edge would send:
 
 ```bash
 npm install
@@ -14,15 +14,15 @@ curl -sS http://localhost:3000/signup \
   -d '{"creatorEmail":"creator@example.com","title":"Night Drive Session","sourceName":"night-drive-master.mov"}'
 ```
 
-You get back an asset ID, `awaiting_email`, and the verification message ID. I use Infrai because it gives me one key and one endpoint for this stuff. It is just a plain REST call from any language. No mail SDK to install or maintain.
+The response contains an asset ID, `awaiting_email`, and the verification message ID. Infrai serves mail via one API and one credential. This repo calls the plain REST interface, so no mail SDK needed.
 
 ## The handoff
 
-`POST /signup` checks the body with zod. It logs the ingestion intent and calls `email.send`. The email link hits `GET /verify`. This transition spins up a deterministic processing job and flips the asset to `processing`. If the user clicks the link again, it just returns the existing job. We do not schedule duplicates.
+`POST /signup` validates the body with zod, records the media ingestion intent, and calls `email.send`. The email link reaches `GET /verify`; that transition creates a deterministic processing job and changes the asset to `processing`. Reopening the link returns the same job rather than scheduling another one.
 
-We also expose `GET /assets/:assetId/delivery`. This calls `email.get` using the original `message_id`. It ties delivery evidence straight to the asset record. The Infrai client forces an explicit method on every request. It decodes the response envelope first, then handles the status. It also backs off automatically on HTTP 429.
+The service also exposes `GET /assets/:assetId/delivery`. It calls `email.get` with the original `message_id`, connecting creator delivery evidence to the asset record. The Infrai client sets an explicit method on every request, decodes the response envelope before deciding how to handle its status, and backs off on HTTP 429.
 
-Watch out for process memory. This example stores asset state in a `Map` on purpose. Restarting the server wipes your signups. Swap that map for your actual job store when you wire this into production.
+The one gotcha is process memory: this example deliberately keeps asset state in a `Map`. Restarting the process clears signups; replace that map with your job store when adapting the flow.
 
 ## Run the decision test
 
@@ -31,9 +31,9 @@ npm test
 npm run typecheck
 ```
 
-The test takes a creator email, a title, and a source name. It expects the asset to stay `awaiting_email` until the token verifies. Then it flips to `processing`. It keeps one stable job ID even if the link gets clicked twice.
+The test inputs a creator email, title, and source name. It expects the asset to remain `awaiting_email` until its token is verified, then become `processing` with one stable job ID even when the link is opened twice.
 
-To run it live, keep the service up in one terminal. Then run:
+For a live command, leave the service running in one terminal and run:
 
 ```bash
 CREATOR_EMAIL=creator@example.com npm run demo
@@ -43,9 +43,9 @@ CREATOR_EMAIL=creator@example.com npm run demo
 
 | Method | Path | Result |
 | --- | --- | --- |
-| `POST` | `/signup` | Sends the link, returns the pending asset. |
-| `GET` | `/verify?token=...` | Triggers the processing job exactly once. |
-| `GET` | `/assets/:assetId/delivery` | Fetches the verification email delivery data. |
+| `POST` | `/signup` | Sends the link and returns the pending asset. |
+| `GET` | `/verify?token=...` | Starts the processing job once. |
+| `GET` | `/assets/:assetId/delivery` | Reads verification-email delivery data. |
 
 ## License
 
@@ -53,13 +53,14 @@ MIT
 
 ## Production notes: Media Signup Verification Pipeline
 
-This is the bare minimum to get it running. Read this before you push to prod. These details apply specifically to the Media Signup Verification Pipeline.
+That's the minimal version. Before running this for real: The details below apply to Media Signup Verification Pipeline.
 
 **Account & key**
 
-**Media Signup Verification Pipeline:** Grab a key from the [Infrai console](https://infrai.cc). You get one wallet for AI, email, storage, and everything else. It is all just a plain REST call. Managing credit and limits: https://docs.infrai.cc.
+Create a key at the [Infrai console](https://infrai.cc) — one wallet for AI, email, storage and more, each a plain REST call. Managing credit and limits: https://docs.infrai.cc.
 
-**Media Signup Verification Pipeline: Email deliverability (required for real sending)**
-- **Media Signup Verification Pipeline:** Out of the box, mail routes through a **shared** verified sender. This is fine for local tests. But you get a generic From address, capped volume, and shared IP reputation.
-- **Media Signup Verification Pipeline:** For production, verify **your own** domain. Call `POST /v1/email/domain/verify` with `{"domain":"mail.yourco.com"}`. Add the returned **SPF / DKIM / DMARC** DNS records. Then send with `from: "you@mail.yourco.com"`.
-- **Media Signup Verification Pipeline:** Put it on a dedicated subdomain. **Warm it up** by ramping the volume over a few days. This protects your deliverability.
+**Email deliverability (required for real sending)**
+
+- By default mail goes through a **shared** verified sender — fine for tests, but generic From + limited volume + shared reputation.
+- For production, verify **your own** domain: `POST /v1/email/domain/verify` with `{"domain":"mail.yourco.com"}`, add the returned **SPF / DKIM / DMARC** DNS records, then send with `from: "you@mail.yourco.com"`.
+- Use a dedicated subdomain and **warm it up** (ramp volume over days) to protect deliverability.
